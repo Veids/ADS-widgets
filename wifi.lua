@@ -352,13 +352,13 @@ local function processAPProperties(t, k, v)
     t._link.menuItem.BitRate.text = "├BitRate (HW/AP):\t" .. string.format("%d/%d Mb/s", t._link.Dev.Bitrate // 1000, v // 1000) -- 1000 because it looks better :)
   elseif k == "Strength" and t._link.Dev.InterfaceFlags ~= 0 then
     t._link.menuItem.SignalLvl.text = string.format("├Signal LvL:\t\t%d%%", t.Strength)
-    if v < 25 then
+    if v <= 10 then
       wifiWidget:set_text(icon_class.wifi[2])
-    elseif v < 50 then
+    elseif v <= 25 then
       wifiWidget:set_text(icon_class.wifi[3])
-    elseif v < 70 then
+    elseif v <= 50 then
       wifiWidget:set_text(icon_class.wifi[4])
-    elseif v < 85 then
+    elseif v <= 75 then
       wifiWidget:set_text(icon_class.wifi[5])
     else
       wifiWidget:set_text(icon_class.wifi[6])

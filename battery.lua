@@ -10,6 +10,8 @@ local lib = require("widgets.bar.ads.lib")
 
 local icon_class = icons.text.mdn
 
+local charger_plugged
+
 local batteryTechs = {
   [0] = "Unknown",
   [1] = "Li-ion",
@@ -47,57 +49,8 @@ local batteryWidget = wibox.widget {
   end
 }
 
-local batteryPopupWidget = wibox.widget{
-  {
-    id = "NativePath",
-    widget = wibox.widget.textbox,
-  },
-  {
-    id = "Percentage",
-    widget = wibox.widget.textbox,
-  },
-  {
-    id = "Capacity",
-    widget = wibox.widget.textbox,
-  },
-  {
-    id = "TTFE",
-    widget = wibox.widget.textbox,
-  },
-  {
-    id = "Voltage",
-    widget = wibox.widget.textbox,
-  },
-  {
-    id = "Energy",
-    widget = wibox.widget.textbox,
-  },
-  {
-    id = "Technology",
-    widget = wibox.widget.textbox,
-  },
-  {
-    {
-      {
-        id = "Graph",
-        widget = wibox.widget.graph,
-        max_value = 100,
-        min_value = 0,
-        steps_width = 2,
-        steps_spacing = 1,
-        forced_width = 200,
-        color = "linear:0,0:0,20:0,#FF0000:0.3,#FFFF00:0.6," .. beautiful.fg_normal,
-        background_color = "#00000000",
-        border_color = colors.gray
-      },
-      widget = wibox.container.mirror,
-      reflection = {horizontal = true},
-    },
-    widget = wibox.container.margin,
-    margins = 4
-  },
-  layout = wibox.layout.fixed.vertical
-}
+local batteries_widget = wibox.layout.fixed.vertical()
+local batteries_table = {}
 
 local batteryPopup = awful.popup{
     ontop = true,
@@ -109,7 +62,7 @@ local batteryPopup = awful.popup{
     maximum_width = 300,
     offset = { y = 5 },
     widget = {
-      batteryPopupWidget,
+      batteries_widget,
       widget = wibox.container.margin,
       margins = 4
     }
@@ -118,59 +71,116 @@ local batteryPopup = awful.popup{
 batteryWidget:connect_signal("mouse::enter", function() batteryPopup.visible = true; batteryPopup:move_next_to(mouse.current_widget_geometry) end)
 batteryWidget:connect_signal("mouse::leave", function() batteryPopup.visible = false end)
 
-local function batteryPropertyChanged(t, k, v)
-  if k == "charger_plugged" or k == "Percentage" or (k == "State" and v == 4) then
-    if t.charger_plugged ~= nil and t.Percentage ~= nil then
-      batteryWidget:set_text(t.Percentage, t.charger_plugged, t.State)
-    end
-  end
+local BatteryItem = {}
 
-  if k == "NativePath" then
-    batteryPopupWidget.NativePath.text = "┌[" .. v .. "]"
-  elseif k == "Percentage" then
-    batteryPopupWidget.Percentage.text = "├PCT:\t\t" .. tostring(v)
-  elseif k == "Capacity" then
-    batteryPopupWidget.Capacity.text = "├Capacity:\t" .. string.format("%02.f%%", v)
-  elseif k == "TimeToEmpty" and v ~= 0 then
-    local time = lib.secondsToClock(v, true)
-    batteryPopupWidget.TTFE.text = "├TTE:\t\t" .. time
-  elseif k == "TimeToFull" and v ~= 0 then
-    local time = lib.secondsToClock(v, true)
-    batteryPopupWidget.TTFE.text = "├TTF:\t\t" .. time
-  elseif k == "Voltage" then
-    batteryPopupWidget.Voltage.text = "├Voltage:\t" .. tostring(v)
-  elseif (k == "Energy" or k == "EnergyFull" or k == "EnergyRate") and
-         (t.Energy ~= nil and t.EnergyFull ~= nil and t.EnergyRate ~= nil) then
-    batteryPopupWidget.Energy.text = "├Energy (Wh):\t" .. string.format(
-      "%.2f / %.2f / %.2f",
-      t.Energy,
-      t.EnergyFull,
-      t.EnergyRate
-    )
-  elseif k == "Technology" then
-    batteryPopupWidget.Technology.text = "└Technology:\t" .. batteryTechs[v]
+function BatteryItem:new(data)
+  local obj = {}
+  obj.objectPath = objectPath
+
+  setmetatable(obj, self)
+  self.__index = self
+  obj:init(data)
+  return obj
+end
+
+function BatteryItem:init(data)
+  self.widget = BatteryItem:buildWidget()
+  self.data = data
+  self:update(data)
+end
+
+function BatteryItem:update(data)
+  if data == nil then return end
+  for k, v in pairs(data) do
+    self.data[k] = v
+
+    if self.data.Type == 2 and (k == "Percentage" or (k == "State" and v == 4)) then
+      if charger_plugged ~= nil and self.data.Percentage ~= nil then
+        batteryWidget:set_text(self.data.Percentage, charger_plugged, self.data.State)
+      end
+    end
+
+    if k == "NativePath" then
+      self.widget.NativePath.text = "┌[" .. v .. "]"
+    elseif k == "Percentage" then
+      self.widget.Percentage.text = "├PCT:\t\t" .. tostring(v)
+    elseif k == "Capacity" then
+      self.widget.Capacity.text = "├Capacity:\t" .. string.format("%02.f%%", v)
+    elseif k == "TimeToEmpty" and v ~= 0 then
+      local time = lib.secondsToClock(v, true)
+      self.widget.TTFE.text = "├TTE:\t\t" .. time
+    elseif k == "TimeToFull" and v ~= 0 then
+      local time = lib.secondsToClock(v, true)
+      self.widget.TTFE.text = "├TTF:\t\t" .. time
+    elseif k == "Voltage" then
+      self.widget.Voltage.text = "├Voltage:\t" .. tostring(v)
+    elseif (k == "Energy" or k == "EnergyFull" or k == "EnergyRate") and
+           (self.data.Energy ~= nil and self.data.EnergyFull ~= nil and self.data.EnergyRate ~= nil) then
+      self.widget.Energy.text = "├Energy (Wh):\t" .. string.format(
+        "%.2f / %.2f / %.2f",
+        self.data.Energy,
+        self.data.EnergyFull,
+        self.data.EnergyRate
+      )
+    elseif k == "Technology" then
+      self.widget.Technology.text = "└Technology:\t" .. batteryTechs[v]
+    end
   end
 end
 
-local batteryInfo = lib.trackingTable(batteryPropertyChanged)
+function BatteryItem.buildWidget()
+  return wibox.widget{
+    {
+      id = "NativePath",
+      widget = wibox.widget.textbox,
+    },
+    {
+      id = "Percentage",
+      widget = wibox.widget.textbox,
+    },
+    {
+      id = "Capacity",
+      widget = wibox.widget.textbox,
+    },
+    {
+      id = "TTFE",
+      widget = wibox.widget.textbox,
+    },
+    {
+      id = "Voltage",
+      widget = wibox.widget.textbox,
+    },
+    {
+      id = "Energy",
+      widget = wibox.widget.textbox,
+    },
+    {
+      id = "Technology",
+      widget = wibox.widget.textbox,
+    },
+    layout = wibox.layout.fixed.vertical
+  }
+end
 
 awesome.connect_signal("subsystem::charger", function(plugged)
-  batteryInfo.charger_plugged = plugged
+  charger_plugged = plugged
 end)
 
-awesome.connect_signal("subsystem::battery", function(batteryId, data)
-  for k, v in pairs(data) do
-    batteryInfo[k] = v
+awesome.connect_signal("subsystem::battery", function(updateType, devicePath, data)
+  if updateType == "update" then
+    if batteries_table[devicePath] == nil then
+      batteries_table[devicePath] = BatteryItem:new(data)
+      batteries_widget:add(batteries_table[devicePath].widget)
+    else
+      batteries_table[devicePath]:update(data)
+    end
+  elseif updateType == "remove" then
+    batteryItem = batteries_table[devicePath]
+    if batteryItem ~= nil then
+      batteries_table[devicePath] = nil
+      batteries_widget:remove_widgets(batteryItem.widget)
+    end
   end
 end)
-
-gears.timer{
-  timeout = 100,
-  call_now = false,
-  autostart = true,
-  callback = function()
-    batteryPopupWidget:get_children_by_id("Graph")[1]:add_value(batteryInfo.Percentage)
-  end
-}
 
 return batteryWidget
