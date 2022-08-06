@@ -48,7 +48,7 @@ local function flags_to_security(flags, wpa_flags, rsn_flags)
       str = str .. " WPA3"
     elseif rsn_flags & NM_802_11_AP_SEC_KEY_MGMT_EAP_SUITE_B_192 ~= 0 then
       str = str .. " WPA3-E"
-    elseif rsn_flags & NM_802_11_AP_SEC_KEY_MGMT_OWE then
+    elseif rsn_flags & NM_802_11_AP_SEC_KEY_MGMT_OWE ~= 0 then
       str = str .. " OWE"
     else
       str = str .. " WPA2"
